@@ -1,0 +1,681 @@
+<p id="notice"><%= notice %></p>
+
+<div class="container well">
+
+  <div id="video-container" class="rtccWebRTCControls" style="width:322px; height:182px; background:#ffffff; border: 1px solid black; display:none">
+    <%= image_tag("Girl_with_a_Pearl_Earring.jpg", size: "320x180", style: "position:absolute") %>
+    <%#= image_tag("SightCall_Logo.png", size: "320x180", style: "position:absolute") %>
+  </div>
+
+</div>
+
+<div class="container well">
+
+  <h4>Chat / Video Call</h4>
+
+  <table class="table table-condensed table-striped">
+    <thead>
+    </thead>
+
+    <tbody>
+      <% @friends.each do |friend| %>
+        <tr>
+          <td> <div class="rtccPresenceStatus" status="unknown" rtccUid="<%= friend.rtcc_uid %>"> </div> <%= friend.name %> </td>
+          <td>
+            <button disabled class="rtccConnectionActive btn btn-xs" onclick="chatFriend('<%= friend.rtcc_uid %>')">Chat</button>
+            <button disabled class="rtccConnectionActive btn btn-xs" onclick="callFriend('<%= friend.rtcc_uid %>')">Call</button>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+
+</div>
+
+<div class="container well">
+
+  <h4>Video Conference</h4>
+
+  <div class="form-horizontal">
+
+    <!-- LAUNCH MEETING -->
+    <div class="form-group">
+      <label for="host_button" class="col-sm-2">Start a meeting:</label>
+
+      <div class="col-sm-4">
+        <button id="host_button" disabled class="rtccConnectionActive btn btn-primary btn-block" disabled onclick="createMeetingPoint()">Begin ad-hoc Meeting</button>
+      </div>
+    </div>
+
+    <!-- INVITE CONTACT -->
+    <div class="form-group">
+      <label for="conf_friend" class="col-sm-2">and invite:</label>
+      <div class="col-sm-4">
+        <div class="input-group">
+          <%= select_tag("conf_friend", options_from_collection_for_select(@friends, 'rtcc_uid', 'name'), {id: "conf_friend_select", disabled: "disabled", class: "rtccHostActive form-control"}) %>
+          <span class="input-group-btn">
+            <button id="invite_button" disabled class="rtccHostActive btn btn-primary" onclick="invite()">Invite</button>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MANAGE RECORDING -->
+    <div class="form-group">
+      <label for="recording_title" class="col-sm-2">Cloud Recording:</label>
+      <div class="col-sm-4">
+        <div class="input-group">
+          <input id="recording_title" type="text" class="form-control" placeholder="Title (optional) ...">
+          <span class="input-group-btn">
+            <button id="recording_start_button" disabled class="rtccHostActive btn btn-primary" onclick="newRecording()" >Start</button>
+          </span>
+          <span class="input-group-btn">
+            <button id="recording_stop_button" disabled class="rtccHostActive btn btn-primary" onclick="stopRecording()" >Stop</button>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECORDING STATUS DISPLAY -->
+    <div class="form-group">
+      <div class="col-sm-2">
+        <span id="recording_counter" style="color:red"></span>
+      </div>
+      <div class="col-sm-4">
+        <span id="recording_results"></span>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+
+ ////////////////////////////////////////////////////////////////
+ //
+ // PAGE-GLOBAL Variables
+ //
+
+ var rtccAppId = "<%= RTCC_APP_ID %>";
+ var rtcc = null;
+ var rtccCall = null;
+ var rtccChatWindows = { };
+ var rtccChatManagers = { };
+
+ var rtccCloudrecorderManager = null;
+ var rtccRecording = null;
+ var rtccRecordingCounter = null;
+
+ var MPI = null;
+
+ ////////////////////////////////////////////////////////////////
+ //
+ // get an RTCC token for the current user
+ //
+
+ function getToken(url, success, failure) {
+   $.ajax({
+     type: "POST",
+     url: url,
+     cache: false,
+     dataType: "JSON"
+   }).success(function(data) {
+     console.log(["RtccToken Success", data]);
+     success(data);
+   }).error(function(e) {
+     console.log(["RtccToken error", e]);
+     failure(e);
+   });
+ }
+
+ //
+ // getToken, set it and authenticate (again)
+ //
+
+ function setTokenAndAuthenticate(url) {
+   getToken(
+     url,
+     function(data) {
+       var token = data.token;
+       rtcc.setToken(token);
+       rtcc.authenticate(1);
+     }, function(e) {
+       // the default prints it already
+     });
+ }
+
+ //
+ // Initialize Real-Time Communication
+ //
+
+ function initializeRtcc(rtccAppId, token, displayName) {
+   var options = {
+     debugLevel: 3,
+     displayName: displayName,
+     container: 'video-container'
+     
+   };
+   rtcc = new Rtcc(rtccAppId, token, 'internal', options);
+
+   // The onConnectionHandler reports on the status of the RTCC connection, whether
+   // it is ready to make and receive calls, and when it is able to register for
+   // Presence updates.
+
+   rtcc.onConnectionHandler = function(message, code) {
+     console.log(['onConnectionHandler', message, code]);
+     switch(message) {
+
+       case 'connectedRtccDriver':
+         $(".rtccConnectionStatus").attr("status", "connected");
+         break; 
+
+       case 'connectedWebRTC':
+         $(".rtccConnectionStatus").attr("status", "connected");
+         $(".rtccWebRTCControls").show();
+         break;
+
+       case 'connectedCloud':
+         $(".rtccConnectionStatus").attr("status", "connectedCloud");
+         break;
+
+       case 'disconnectedRtccDriver':
+         $(".rtccConnectionStatus").attr("status", "offline");
+         $(".rtccConnectionActive").attr("disabled", "disabled");
+         setTokenAndAuthenticate("/rtcc/callback");
+         break;
+
+       case 'disconnectedWebRTC':
+         $(".rtccConnectionStatus").attr("status", "offline");
+         $(".rtccConnectionActive").attr("disabled", "disabled");
+         setTokenAndAuthenticate("/rtcc/callback");
+         break;
+
+       case 'sipOk':
+         $(".rtccConnectionStatus").attr("status", "sipOk");
+         $(".rtccConnectionActive").removeAttr("disabled");
+         break;
+
+       case 'sipNok':
+         $(".rtccConnectionStatus").attr("status", "offline");
+         $(".rtccConnectionActive").attr("disabled", "disabled");
+         break;
+
+       case 'dropped':
+         $(".rtccConnectionStatus").attr("status", "alert");
+         $(".rtccConnectionActive").attr("disabled", "disabled");
+         break;
+
+       case 'loggedasotheruser':
+         setTokenAndAuthenticate("/rtcc/callback");
+         break;
+
+       case 'presenceOkNewUser':
+         rtcc.setMyPresence(1);
+         launchPresence();
+         break;
+
+       case 'presenceOkAlreadyRegistered':
+         rtcc.setMyPresence(1);
+         launchPresence();
+         break;
+                            
+     }
+   }
+
+   // The onCallHandler reports on the status of the current call.
+   // Both one-to-one calls and multiparty calls receive these updates.
+     
+   rtcc.onCallHandler = function(call, args) {
+     console.log(['onCallHandler', call, args]);
+     rtccCall = call;
+
+     // Handle incoming call
+     if (args.type == 'webRTCcall' && args.status == 'incoming') {
+       var ans = confirm("Accept call from '" + call.dn + "'?");
+       if (ans == true) {
+         rtccCall.accept();
+       }
+       else {
+         rtccCall.hangup();
+       }
+     }
+
+     // Handle refused call
+     if (args.status == 'terminated' && args.reason == 'rejected') {
+       alert("Call rejected");
+     }
+
+     // Handle call to UID not logged-in
+     if (args.status == 'terminated' && args.reason == 'not found') {
+       alert("User not logged in");
+     }
+
+     // Handle call to BUSY call
+     if (args.status == 'terminated' && args.reason == 'busy') {
+       alert("User is busy");
+     }
+
+     // Manage button highlighting
+     if (args.status == "active") {
+       // look for class rtccCallActive and mark enabled
+       $(".rtccCallActive").removeAttr("disabled");
+     }
+
+     if (args.status == "terminated") {
+       // look for class rtccCallActive and mark disabled
+       $(".rtccCallActive").attr("disabled", "disabled");
+       $(".rtccHostActive").attr("disabled", "disabled");
+
+       if (rtccRecording != null) {
+         interruptRecording();
+       }
+     }
+
+   }
+
+   // The onConfCallHandler receives updates about multiparty and
+   // meeting point functions.
+
+   rtcc.onConfCallHandler = function(action, obj) {
+     console.log(["rtccOnConfCallHandler", action, obj]);
+
+     if (action == 'meetingPointCreated') {
+       MPI = obj;       // the object is the meeting point
+       MPI.autoaccept_mode(); // allow attendees to join with no confirmation
+       MPI.host(); // start hosting the conference
+     }
+
+     if (action == 'meetingPointHosted') {
+       $(".rtccHostActive").removeAttr("disabled");
+     }
+
+     if (action == 'attendeeInvited') {
+       MPI = obj;       // the object is the meeting point       
+       var ans = confirm("Accept conference invitation from '" + MPI.hostDisplayName + "'?");
+       if (ans == true) {
+         MPI.accept();
+       }
+       else {
+         MPI.deny();
+       }
+     }
+
+   }
+
+   // The onGetHandler is called to return values asynchronously.
+
+   rtcc.onGetHandler = function(name, value) {
+     console.log(['onGetHandler', name, value]);
+   }
+
+   // The onMessageReceived handler implements the Chat function.
+
+   rtcc.onMessageReceived = function(msgid, uid, msg) {
+     var chatManager = findChatManager(uid);
+     console.log(["onDataChannelMessageReceived", chatManager]);
+
+     chatManager.appendReceived(msg);
+     console.log(["onDataChannelMessageReceived", "appendReceived", msg]);
+
+     var win = findChatWindow(uid);
+     console.log(["onDataChannelMessageReceived", "foundWindow", uid]);
+   }
+
+   rtcc.onRtccDriverNotStarted = function(downloadUrl) {
+     var answer = confirm('Click OK to download and install the RTCC Client.');
+     if (answer == true) {
+       window.location = downloadUrl;
+     }
+   };
+
+   // onRosterUpdate and onPresenceUpdate are called to notify us of
+   // presence updates.
+
+   rtcc.onRosterRetrieved = onRosterRetrieved;
+   rtcc.onPresenceUpdate = onPresenceUpdate;
+
+   rtcc.initialize();
+ }
+
+ //
+ // Create a one-to-one call
+ //
+
+ function callFriend(friendUid) {
+   rtcc.createCall(friendUid, 'internal', "<%= current_user.name %>");
+ }
+
+ //
+ // Create a new meeting point.  Upon success, begin hosting the multiparty call of the meeting point.
+ // (See 'meetingPointCreated' above.)
+ //
+
+ function createMeetingPoint() {
+   var options = new Object();
+   options.startDate = new Date();
+   options.stopDate = new Date();
+   options.location = "San Francisco";
+   options.title = "teleportation";
+   MPI = rtcc.createMeetingPoint('scheduled', options);
+ }
+
+ //
+ // Invite a friend to join our multiparty call.
+ //
+
+ function invite() {
+   var friendUid = $("#conf_friend_select").val();
+   console.log(["invite", friendUid]);   
+   MPI.invite(friendUid)
+ }
+
+ //
+ // Send a chat message to a friend
+ //
+
+ function chatFriend(friendUid) {
+   console.log(["chat", friendUid]);
+   var win = findChatWindow(friendUid);
+ }
+
+ //
+ // Hang-up the current call
+ //
+
+ function hangup() {
+   rtccCall.hangup();
+ }
+
+ ////////////////////////////////////////////////////////////////
+ //
+ // At page-load time, make sure our user has allowed pop-ups for this site
+ //
+
+ function testPopupWindow() {
+   var testwin = window.open("/chat?uid=foo", "testpopupwindow", "width=400,height=300,status=no,toolbar=no,menubar=no,location=0");
+
+   if (testwin == null || typeof(testwin) == 'undefined') {
+     alert("Please disable your pop-up blocker for this site.  Then logout and login again. Chat windows require pop-ups.");
+   }
+   else {
+     testwin.close();
+   }
+ }
+
+
+ ////////////////////////////////////////////////////////////////
+ //
+ // Find or allocate a ChatManager by UID
+ //
+
+ function findChatManager(uid) {
+
+   if (uid in rtccChatManagers) {
+     var chatManager = rtccChatManagers[uid];
+     return chatManager;
+   }
+   else {
+     var chatManager = new ChatManager(rtcc, "<%= @me.rtcc_uid %>", uid)
+     rtccChatManagers[uid] = chatManager;
+     return chatManager;
+   }
+
+ }
+
+ //
+ // Find or allocate a chat window by UID
+ //
+
+ function findChatWindow(uid) {
+
+   function openChatWindow(uid) {
+
+     // Each UID has its own chat window
+     var euid = encodeURIComponent(uid);
+     var win = window.open("/chat?uid=" + euid, "chat window" + euid, "width=400,height=300,status=no,toolbar=no,menubar=no,location=0");
+
+     if (win == null || typeof(win) == 'undefined') {
+       alert("Please disable your pop-up blocker on this site and re-load the page.  Chat windows use pop-ups.");
+     }
+
+     return win;
+   }
+
+   if (uid in rtccChatWindows) {
+     var win = rtccChatWindows[uid];
+     if (win.closed == true) {
+       win = openChatWindow(uid);
+       rtccChatWindows[uid] = win;
+       return win;
+     }
+     else {
+       win.focus();
+       return win;
+     }
+   }
+   else {
+     win = openChatWindow(uid);
+     rtccChatWindows[uid] = win;
+     return win;
+   }
+ }
+
+ ////////////////////////////////////////////////////////////////
+ //
+ // Presence: get a list of friends to watch
+ //
+
+ function getFriends(success, failure) {
+   $.ajax({
+     type: "GET",
+     url: "<%= url_for :controller => :call, :action => :friends %>",
+     cache: false,
+     dataType: "JSON"
+   }).success(function(data) {
+     console.log(["getFriends Success", data]);
+     success(data);
+   }).error(function(e) {
+     console.log(["getFriends error", e]);
+     failure(e);
+   });
+ }
+
+ function launchPresence() {
+   getFriends(
+     // success
+     function(data) {
+       var friends = data["friends"];
+       var uids = friends.map(function(currentValue) { return currentValue.rtcc_uid; });
+       console.log(["uids", uids]);
+       rtcc.rosterAdd(uids);  // incremental updates
+       rtcc.getRoster(); // ask for updates
+     },
+     //failure
+     function(e) {
+     }
+   )
+ }
+
+ function onRosterRetrieved(uids) {
+   for (var i=0; i < uids.length; i++) {
+     console.log(["i", i]);
+     var uid = uids[i].uid;
+     var presence = uids[i].presence;
+     var selector = ".rtccPresenceStatus[rtccUid=" + uid + "]";
+     var status = null;
+     if (presence == 0) {
+       status = "offline";
+     }
+     else if (presence == 1) {
+       status = "online";
+     }
+     else {
+       status = "unknown";
+     };
+     $(selector).attr("status", status);
+   }
+ }
+
+ function onPresenceUpdate(uids) {
+   for (var i=0; i < uids.length; i++) {
+     console.log(["i", i]);
+     var uid = uids[i].uid;
+     var presence = uids[i].presence;
+     var selector = ".rtccPresenceStatus[rtccUid=" + uid + "]";
+     var status = null;
+     if (presence == 0) {
+       status = "offline";
+     }
+     else if (presence == 1) {
+       status = "online";
+     }
+     else {
+       status = "unknown";
+     };
+     $(selector).attr("status", status);
+   }
+ }
+              
+
+ ////////////////////////////////////////////////////////////////
+ //
+ // Recording: Allocate a recording on the cloud recorder.  Upon creation, of an
+ // start recording to the upload_url and begin an onscreen counter.
+ //
+
+ function newRecording() {
+
+   var title = $("#recording_title").val();
+
+   // Allocate a new recording on the cloud recorder
+   rtccCloudrecorderManager.create(
+     title,
+     // success
+     function(recording) {
+       rtccRecording = recording;
+       rtccCall.recordStart(recording.upload_url, 1);
+       rtccRecordingCounter = new CounterManager("#recording_counter", "");
+     },
+     // failure
+     function(e) {
+       console.log(["newRecording: error", e]);
+     }
+   );
+ }
+
+
+ //
+ // Recording: Stop the current recording, stop the counter.
+ // Begin polling for movie files on the cloud-recorder
+ //
+
+ function stopRecording() {
+
+   $("recording_title").val("");
+
+   if (rtccCall != null) {
+     rtccCall.recordStop();
+     rtccRecordingCounter.stop();
+     $("#recording_counter").html("recording stopped");
+     pollForRecordingDetail(rtccRecording, 0);
+     rtccRecording = null;
+   }
+ }
+
+ //
+ // Recording: the call has been interrupted and as a result, the
+ // recording has been terminated.
+ //
+
+ function interruptRecording() {
+   rtccRecordingCounter.stop();
+   $("#recording_counter").html("recording interrupted");
+   pollForRecordingDetail(rtccRecording, 0);
+   rtccRecording = null;
+ }
+
+ // Recording: format the URLs of the movie types the cloud-recorder
+ // might return.
+ 
+ function createWebmAndMp4Urls(recording) {
+   var webm_s3url = recording.webm_s3url
+   var mp4_s3url = recording.mp4_s3url;
+   var vb_fileurl = recording.vb_fileurl;
+
+   var result = "Movies: ";
+   if (webm_s3url != null) {
+     result = result + "<a href=\"" + webm_s3url + "\" target=_new> webm </a> ";
+   }
+   if (mp4_s3url != null) {
+     result = result + "<a href=\"" + mp4_s3url + "\" target=_new> mp4 </a> ";
+   }
+   if (vb_fileurl != null) {
+     result = result + "<a href=\"" + vb_fileurl + "\" target=_new> vb </a> ";
+   }
+     
+   return result;
+ }
+
+ // Recording: Poll the cloud-recorder for status changes on the current recording.
+ // Format a helpful message in the results area.
+
+ function pollForRecordingDetail(rtccRecording, cnt) {
+   if (cnt > 200) {
+     // do not poll forever
+     return;
+   }
+
+   rtccCloudrecorderManager.detail(
+     rtccRecording,
+     // success
+     function(recording) {
+       console.log(["poll recording", recording]);
+
+       if (recording.status != "done") {
+         setTimeout(function() { pollForRecordingDetail(rtccRecording, cnt+1) }, 1000);
+         $("#recording_results").html("Movies: <progress max=\"100\"></progress>");         
+       }
+       else {
+         $("#recording_results").html(createWebmAndMp4Urls(recording));
+       }
+     },
+     // failure
+     function(e) {
+       console.log(["RtccRecording Error", e]);
+     }
+   );
+ }
+
+
+ ////////////////////////////////////////////////////////////////
+ //
+ // Kick-off this application on page load
+ //
+
+ function documentReady() {
+
+   // Make sure our page allows popups for the text chat feature
+   testPopupWindow();
+
+   // Initialize the cloudrecorder manager with the URLs of our proxy
+   rtccCloudrecorderManager = new CloudrecorderManager(
+     "<%= url_for :controller => :cloudrecorder, :action => :recording %>",
+     "<%= url_for :controller => :cloudrecorder, :action => :detail %>"
+   );
+
+   getToken(
+     "/rtcc/callback",
+     function(data) {
+        var token = data.token;
+       initializeRtcc(rtccAppId, token, "<%= current_user.name %>");
+     }, function(e) {
+       // the default prints it already
+     });
+ }
+
+ $(document).ready(documentReady);
+
+</script>
+
+

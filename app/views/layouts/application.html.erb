@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SightCall Communicator</title>
+  <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css" />
+  <%= stylesheet_link_tag    "application", media: "all" %>
+  <%= javascript_include_tag "application" %>
+  <%= csrf_meta_tags %>
+</head>
+<body>
+
+  <nav class="navbar navbar-default navbar-fixed-top" role="navigation">
+    <div class="container">
+      <div class="navbar-header">
+        <a class="navbar-brand" href="/">SightCall Communicator <div class="rtccConnectionStatus" status=unknown></div> </a>
+        
+      </div>
+      <div class="navbar-collapse">
+
+        <p class="navbar-text pull-right">
+
+          <% if user_signed_in? %>
+            Logged in as <strong><%= current_user.name %></strong>.
+            <%= link_to "Logout", '/auth/logout', :class => 'navbar-link'  %>
+          <% else %>
+            
+          <% end %>
+
+        </p>
+
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <% if notice %>
+      <p class="alert alert-success"><%= notice %></p>
+    <% end %>
+    <% if alert %>
+      <p class="alert alert-danger"><%= alert %></p>
+    <% end %>
+
+    <%= yield %>
+  </div>
+
+  <footer>
+    <div class="container">
+      SightCall 2015
+    </div>
+  </footer>
+
+  <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+  <% if not @layout_suppress_rtcc_js %>
+    <script src="//download.rtccloud.net/js/webappid/<%= RTCC_APP_ID %>" ></script>
+  <% end %>
+
+</body>
+</html>

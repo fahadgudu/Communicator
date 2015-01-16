@@ -1,0 +1,7 @@
+development:
+  username: tutorial_development
+  database: tutorial_development
+  adapter: postgresql
+  encoding: unicode
+  pool: 5
+

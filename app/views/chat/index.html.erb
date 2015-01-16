@@ -1,0 +1,80 @@
+<p id="notice"><%= notice %></p>
+
+<div class="hero-unit">
+  <% if @friend %>
+    <h2> <%= @friend.name %> </h2>
+  <% else %>
+  <% end %>
+</div>
+
+<div id="chatmessages" class="panel panel-default">
+  (chat messages here) <br>
+  <br>
+  <br>
+  <br>
+</div>
+
+<form id="chatform" >
+  <div class="input-group">
+    <input id="chattext" type="text" class="form-control"/>
+    <span class="input-group-btn"> <button type="submit" class="btn btn-default"> Send </button> </span>
+  </div>
+</form>
+
+<%= audio_tag("Click03.mp3", id: 'clicksound', autoplay: true, controls: false) %>
+
+<script>
+
+ // The chat manager that we retrieve from our parent window.
+
+ var chatManager;
+
+ //
+ // This is the submit function for our chat
+ //
+
+ $("#chatform").submit(function() {
+
+   msg = $("#chattext").val();
+   $("#chattext").val("");
+
+   if (chatManager) {
+     chatManager.sendMessage(msg);
+     $("#chatmessages").html(chatManager.getHtmlMessages());
+   }
+
+   return false;
+ })
+
+ // On page load, we update the current state of the messages, and
+ // then register a listener for updates.
+
+ function documentReady() {
+   window.opener.console.log(["documentReady"]);
+
+   // Find the chat manager for this friend in my parent window
+   chatManager = window.opener.findChatManager("<%= @friend.rtcc_uid %>");
+   window.opener.console.log(["documentReady", "<%= @friend.rtcc_uid %>", chatManager]);
+
+   // Insert the current state of the chat messages
+   $("#chatmessages").html(chatManager.getHtmlMessages());
+
+   // Register our update function on the chatManager
+   chatManager.onUpdate = function(is_received) {
+
+     // if the window has closed in the meantime, do not update
+     if (window) {
+       window.opener.console.log(["onUpdate", window, window.closed]);
+       if (is_received == true) {
+         $("#clicksound")[0].play();
+       }
+       $("#chatmessages").html(chatManager.getHtmlMessages());
+     }
+
+   }
+ }
+
+$(document).ready(documentReady);
+
+</script>
+
