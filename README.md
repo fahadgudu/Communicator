@@ -178,7 +178,7 @@ to the SightCall Realtime Platform.
 
 Note the presence status of your contacts.  Select a contact and
 initiate a one-to-one call.  SightCall's signaling platform notifies
-your contact and Communicator displays up an alert asking them to answer
+your contact and Communicator displays an alert asking them to answer
 the call.
 
 <img src="images/CommunicatorNarrowCall.png" width="200px" />
