@@ -79,7 +79,7 @@ Note the URL of the project you just created.  (E.g. https://adjective-noun-1234
     % git push heroku master
 ```
 
-- Run the `bootstrap` task (in file lib/rake/bootstrap.rb).  This
+- Run the `bootstrap` task (in file lib/tasks/bootstrap.rake).  This
   creates the database and the default users.  If you would like to
   customize the default users, you can edit the task before you invoke
   it.
