@@ -11,7 +11,7 @@ class User < ActiveRecord::Base
   end
 
   def rtcc_profile
-    "premium"
+    "premium_recording_plus"
   end
 
   def rtcc_domain
