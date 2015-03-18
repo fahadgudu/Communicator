@@ -28,6 +28,12 @@ Heroku will suffice.)  Read on.
 
 <img src="images/CommunicatorFullOrig.png" width="75%" />
 
+#### And Mobile Too!
+
+See also
+[Communicator-for-Android](https://github.com/sightcall/Communicator-for-Android),
+a mobile App that you can run on Android.
+
 
 ## Run It On Heroku
 
@@ -141,6 +147,14 @@ You can add users like this.
 ```
 
 Be sure not to forget the **.save**!
+
+You can delete and list users like this.
+
+```sh
+    % heroku run bin/rails console
+    > User.find_by_name("bob").destroy
+    > User.all
+```
 
 
 
